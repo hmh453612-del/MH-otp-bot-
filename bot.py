@@ -13,7 +13,7 @@ BOT_TOKEN = "8511257279:AAFae-zXUWPBXPuPAsRV7rftlnUQJ3xeFuE"
 BOT_USERNAME = "mh_otp94_bot"
 ADMIN_ID = 8855522653
 
-# আপনার পার্মানেন্ট লকড এপিআই
+# আপনার পার্মানেন্ট লকড এপিআই কী
 LOCKED_API_KEY = "np_live_O4Qeh4k2DI01RPRT0WyhKz_qI5mFZxrRAVjDqis7dV0"
 LOCKED_API_URL = "https://api.numberpool.io/v1"
 
@@ -66,40 +66,39 @@ def init_db():
 init_db()
 user_states = {}
 
-# ================= ROBUST API HANDLER =================
+# ================= ADVANCED UNIVERSAL API HANDLER =================
 def get_live_services():
-    """এপিআই থেকে লাইভ সার্ভিস ফেচ করার জন্য মাল্টি-এন্ডপয়েন্ট ট্রায়াল সিস্টেম"""
+    """এপিআই থেকে লাইভ সার্ভিস লিস্ট ফেচ করবে (একাধিক মেথড সাপোর্টসহ)"""
     headers = {"Authorization": f"Bearer {LOCKED_API_KEY}", "x-api-key": LOCKED_API_KEY}
     
-    endpoints = [
-        f"{LOCKED_API_URL}/services",
-        f"{LOCKED_API_URL.replace('/v1', '')}/stubs/handler_api.php?api_key={LOCKED_API_KEY}&action=getServicesList",
-        "https://api.sms-activate.org/stubs/handler_api.php?api_key=" + LOCKED_API_KEY + "&action=getServicesList"
-    ]
-    
-    for url in endpoints:
-        try:
-            resp = requests.get(url, headers=headers if "handler_api" not in url else {}, timeout=8)
-            if resp.status_code == 200:
-                data = resp.json() if resp.headers.get('content-type', '').startswith('application/json') else None
-                if not data and "status" in resp.text:
-                    import json
-                    try: data = resp.json()
-                    except: pass
-                
-                if isinstance(data, list) and len(data) > 0:
-                    return [{"code": s.get("code", s.get("id", str(s))), "name": s.get("name", str(s))} for s in data]
-                elif isinstance(data, dict):
-                    srv_list = data.get("services") or data.get("data") or data.get("result") or []
-                    if isinstance(srv_list, list) and len(srv_list) > 0:
-                        return [{"code": s.get("code", s.get("id", str(s))), "name": s.get("name", str(s))} for s in srv_list]
-                    elif isinstance(srv_list, dict):
-                        return [{"code": k, "name": v if isinstance(v, str) else v.get("name", k)} for k, v in srv_list.items()]
-        except Exception as e:
-            print(f"Service fetch error on {url}: {e}")
-            continue
+    # ট্রায়াল ১: স্ট্যান্ডার্ড REST JSON
+    try:
+        resp = requests.get(f"{LOCKED_API_URL}/services", headers=headers, timeout=6)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list) and len(data) > 0:
+                return [{"code": s.get("code", s.get("id", str(s))), "name": s.get("name", str(s))} for s in data]
+            elif isinstance(data, dict):
+                srv = data.get("services") or data.get("data") or []
+                if isinstance(srv, list) and len(srv) > 0:
+                    return [{"code": s.get("code", s.get("id", str(s))), "name": s.get("name", str(s))} for s in srv]
+                elif isinstance(srv, dict):
+                    return [{"code": k, "name": v if isinstance(v, str) else v.get("name", k)} for k, v in srv.items()]
+    except:
+        pass
 
-    # যদি এপিআই কানেক্ট না হয় বা কোনো কারণে রেসপন্স ফেইল করে, তবে স্ট্যান্ডার্ড পপুলার সার্ভিসগুলো দেখাবে যাতে ইউজার আটকে না যায়
+    # ট্রায়াল ২: SMS-Activate / Stub Handler প্রোটোকল
+    try:
+        url = f"https://api.sms-activate.org/stubs/handler_api.php?api_key={LOCKED_API_KEY}&action=getServicesList"
+        resp = requests.get(url, timeout=6)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, dict):
+                return [{"code": k, "name": v.get("name", k) if isinstance(v, dict) else k} for k, v in data.items()]
+    except:
+        pass
+
+    # ডিফল্ট লিস্ট (যদি এপিআই সাময়িকভাবে রুট পরিবর্তন করে)
     return [
         {"code": "whatsapp", "name": "WhatsApp"},
         {"code": "telegram", "name": "Telegram"},
@@ -107,27 +106,24 @@ def get_live_services():
         {"code": "instagram", "name": "Instagram"},
         {"code": "tiktok", "name": "TikTok"},
         {"code": "google", "name": "Google/YouTube"},
-        {"code": "imo", "name": "IMO"},
-        {"code": "twitter", "name": "Twitter/X"}
+        {"code": "imo", "name": "IMO"}
     ]
 
 def get_live_countries(service_code):
     headers = {"Authorization": f"Bearer {LOCKED_API_KEY}", "x-api-key": LOCKED_API_KEY}
-    url = f"{LOCKED_API_URL}/countries?service={service_code}"
     try:
-        resp = requests.get(url, headers=headers, timeout=8)
+        resp = requests.get(f"{LOCKED_API_URL}/countries?service={service_code}", headers=headers, timeout=6)
         if resp.status_code == 200:
             data = resp.json()
             if isinstance(data, list):
                 return [{"code": c.get("code", c.get("id", str(c))), "name": c.get("name", str(c))} for c in data]
             elif isinstance(data, dict):
-                cnt_list = data.get("countries") or data.get("data") or []
-                if isinstance(cnt_list, list):
-                    return [{"code": c.get("code", c.get("id", str(c))), "name": c.get("name", str(c))} for c in cnt_list]
-    except Exception:
+                cnt = data.get("countries") or data.get("data") or []
+                if isinstance(cnt, list):
+                    return [{"code": c.get("code", c.get("id", str(c))), "name": c.get("name", str(c))} for c in cnt]
+    except:
         pass
     
-    # ডিফল্ট কান্ট্রি লিস্ট
     return [
         {"code": "benin", "name": "🇧🇯 Benin"},
         {"code": "iraq", "name": "🇮🇶 Iraq"},
@@ -142,32 +138,45 @@ def get_live_countries(service_code):
 
 def purchase_live_number(service, country):
     headers = {"Authorization": f"Bearer {LOCKED_API_KEY}", "x-api-key": LOCKED_API_KEY, "Content-Type": "application/json"}
-    payload = {"service": service, "country": country}
-    url = f"{LOCKED_API_URL}/order"
+    
+    # ট্রায়াল ১: JSON POST /order অথবা /buy
+    for endpoint in ["order", "buy", "getNumber"]:
+        try:
+            payload = {"service": service, "country": country}
+            resp = requests.post(f"{LOCKED_API_URL}/{endpoint}", headers=headers, json=payload, timeout=8)
+            if resp.status_code in (200, 201):
+                data = resp.json()
+                order_id = data.get("order_id") or data.get("id") or data.get("order")
+                number = data.get("number") or data.get("phone")
+                if number:
+                    return {"success": True, "order_id": str(order_id), "number": str(number)}
+                if "error" in data or "message" in data:
+                    return {"success": False, "msg": data.get("error") or data.get("message")}
+        except:
+            pass
+
+    # ট্রায়াল ২: GET মেথড প্যারামিটার রিকোয়েস্ট
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=10)
-        if resp.status_code in (200, 201):
+        resp = requests.get(f"{LOCKED_API_URL}/order?service={service}&country={country}", headers=headers, timeout=8)
+        if resp.status_code == 200:
             data = resp.json()
-            order_id = data.get("order_id") or data.get("id") or data.get("order")
+            order_id = data.get("order_id") or data.get("id")
             number = data.get("number") or data.get("phone")
             if number:
                 return {"success": True, "order_id": str(order_id), "number": str(number)}
-            if "error" in data or "message" in data:
-                return {"success": False, "msg": data.get("error") or data.get("message")}
-    except Exception as e:
-        print(f"Buy error: {e}")
-    
-    return {"success": False, "msg": "API সার্ভার থেকে নম্বর পাওয়া যায়নি! স্টক খালি আছে।"}
+    except:
+        pass
+
+    return {"success": False, "msg": "API সার্ভারে এই সার্ভিসের স্টক এই মুহূর্তে খালি আছে বা এপিআই ব্যালেন্স শেষ!"}
 
 def check_live_otp(order_id):
     headers = {"Authorization": f"Bearer {LOCKED_API_KEY}", "x-api-key": LOCKED_API_KEY}
-    url = f"{LOCKED_API_URL}/order/{order_id}"
     try:
-        resp = requests.get(url, headers=headers, timeout=8)
+        resp = requests.get(f"{LOCKED_API_URL}/order/{order_id}", headers=headers, timeout=6)
         if resp.status_code == 200:
             data = resp.json()
             return data.get("otp") or data.get("sms") or data.get("code")
-    except Exception:
+    except:
         pass
     return None
 
@@ -231,7 +240,7 @@ def get_number_flow(message):
     services = get_live_services()
     
     if not services:
-        bot.send_message(message.chat.id, "❌ **এপিআই থেকে কোনো সার্ভিস লোড করা যায়নি!** অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।")
+        bot.send_message(message.chat.id, "❌ **এপিআই থেকে কোনো সার্ভিস লোড করা যায়নি!**")
         return
 
     markup = types.InlineKeyboardMarkup(row_width=2)
@@ -354,18 +363,16 @@ def on_back_to_services(call):
 def on_close_box_click(call):
     bot.delete_message(call.message.chat.id, call.message.message_id)
 
-# ================= OTHER FEATURES (Search, 2FA, Refer, Withdrawal, Admin) =================
+# ================= OTHER MODULES (Search, 2FA, Refer, Withdrawal, Admin) =================
 @bot.message_handler(func=lambda msg: msg.text == "🔍 Search Number")
 def search_num_ui(message):
-    text = "🔍 **Enter 3 to 9 digits to search for a number:**"
     user_states[message.from_user.id] = "SEARCHING"
-    bot.send_message(message.chat.id, text, reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="🔙 Cancel", callback_data="close_box")))
+    bot.send_message(message.chat.id, "🔍 **Enter 3 to 9 digits to search for a number:**", reply_markup=types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="🔙 Cancel", callback_data="close_box")))
 
 @bot.message_handler(func=lambda msg: msg.text == "🔐 2FA ONLINE")
 def two_fa_ui(message):
-    text = "🔐 **Generate 2FA Code:**"
     markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(text="🛡️ Generate 2fa code", callback_data="ask_2fa_key"))
-    bot.send_message(message.chat.id, text, reply_markup=markup)
+    bot.send_message(message.chat.id, "🔐 **Generate 2FA Code:**", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "ask_2fa_key")
 def on_ask_2fa(call):
@@ -500,5 +507,5 @@ class SimpleHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     threading.Thread(target=lambda: HTTPServer(('0.0.0.0', int(os.environ.get("PORT", 8080))), SimpleHandler).serve_forever(), daemon=True).start()
-    print("🤖 Bot started successfully with dual API handlers...")
+    print("🤖 Bot started successfully with universal API handlers...")
     bot.infinity_polling()
