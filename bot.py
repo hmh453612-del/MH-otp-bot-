@@ -8,17 +8,17 @@ from telebot import types
 import requests
 import pyotp
 
-# ================= CONFIGURATION =================
+# ================= SECURE CONFIGURATION =================
 BOT_TOKEN = "8511257279:AAFae-zXUWPBXPuPAsRV7rftlnUQJ3xeFuE"
 BOT_USERNAME = "mh_otp94_bot"
 ADMIN_ID = 8855522653
 
-# আপনার ডিফল্ট API সেটিংস (এডমিন প্যানেল থেকে যেকোনো সময় পরিবর্তনযোগ্য)
-DEFAULT_API_KEY = "np_live_O4Qeh4k2DI01RPRT0WyhKz_qI5mFZxrRAVjDqis7dV0"
-DEFAULT_API_URL = "https://api.numberpool.io/v1"
+# আপনার পার্মানেন্ট লকড এপিআই (বাইরে থেকে পরিবর্তনের কোনো সুযোগ নেই)
+LOCKED_API_KEY = "np_live_O4Qeh4k2DI01RPRT0WyhKz_qI5mFZxrRAVjDqis7dV0"
+LOCKED_API_URL = "https://api.numberpool.io/v1"
 
-REFER_BONUS = 50.0   # প্রতি রেফারেল বোনাস
-MIN_WITHDRAW = 1000.0 # সর্বনিম্ন উইথড্রয়াল
+REFER_BONUS = 50.0   # প্রতি রেফারেল বোনাস (৳)
+MIN_WITHDRAW = 1000.0 # সর্বনিম্ন উইথড্র (৳)
 SUPPORT_USERNAME = "mh_admin"
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown")
@@ -60,47 +60,21 @@ def init_db():
             status TEXT DEFAULT 'Pending'
         )
     """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS config (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        )
-    """)
-    # Insert default settings if not exists
-    c.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('api_key', ?)", (DEFAULT_API_KEY,))
-    c.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('api_url', ?)", (DEFAULT_API_URL,))
     conn.commit()
     conn.close()
 
 init_db()
 
-def get_config(key):
-    conn = sqlite3.connect("database.db")
-    c = conn.cursor()
-    c.execute("SELECT value FROM config WHERE key = ?", (key,))
-    row = c.fetchone()
-    conn.close()
-    return row[0] if row else ""
-
-def set_config(key, value):
-    conn = sqlite3.connect("database.db")
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", (key, value))
-    conn.commit()
-    conn.close()
-
 user_states = {}
 
-# ================= 100% REAL LIVE API CLIENT =================
+# ================= SECURE 100% LIVE API INTEGRATION =================
 def api_request(endpoint, method="GET", params=None, json_data=None):
-    api_key = get_config("api_key")
-    api_url = get_config("api_url").rstrip("/")
     headers = {
-        "Authorization": f"Bearer {api_key}",
-        "x-api-key": api_key,
+        "Authorization": f"Bearer {LOCKED_API_KEY}",
+        "x-api-key": LOCKED_API_KEY,
         "Content-Type": "application/json"
     }
-    url = f"{api_url}/{endpoint.lstrip('/')}"
+    url = f"{LOCKED_API_URL.rstrip('/')}/{endpoint.lstrip('/')}"
     try:
         if method == "GET":
             resp = requests.get(url, headers=headers, params=params, timeout=12)
@@ -109,11 +83,11 @@ def api_request(endpoint, method="GET", params=None, json_data=None):
         if resp.status_code in (200, 201):
             return resp.json()
     except Exception as e:
-        print(f"API Error: {e}")
+        print(f"API Connection Error: {e}")
     return None
 
 def get_live_services():
-    """এপিআই থেকে লাইভ সক্রিয় সার্ভিস তালিকা সংগ্রহ করে"""
+    """এপিআই থেকে সরাসরি লাইভ সার্ভিস তালিকা ফেচ করবে"""
     data = api_request("services")
     if data:
         if isinstance(data, list):
@@ -127,7 +101,7 @@ def get_live_services():
     return []
 
 def get_live_countries(service_code):
-    """এপিআই থেকে নির্বাচিত সার্ভিসের জন্য দেশগুলোর তালিকা আনে"""
+    """নির্দিষ্ট সার্ভিসের জন্য এপিআই থেকে দেশগুলোর তালিকা ফেচ করবে"""
     data = api_request("countries", params={"service": service_code})
     if data:
         if isinstance(data, list):
@@ -139,7 +113,7 @@ def get_live_countries(service_code):
     return []
 
 def purchase_live_number(service, country):
-    """শুধুমাত্র এপিআই থেকেই আসল নম্বর কেনা হবে"""
+    """এপিআই থেকে রিয়েল নাম্বার পারচেজ করবে (কোনো ডামি নাম্বার নেই)"""
     payload = {"service": service, "country": country}
     data = api_request("order", method="POST", json_data=payload) or api_request("buy", method="POST", json_data=payload)
     if data and isinstance(data, dict):
@@ -149,16 +123,16 @@ def purchase_live_number(service, country):
             return {"success": True, "order_id": str(order_id), "number": str(number)}
         if "error" in data or "message" in data:
             return {"success": False, "msg": data.get("error") or data.get("message")}
-    return {"success": False, "msg": "API থেকে নম্বর পাওয়া যায়নি বা ব্যালেন্স/স্টক শেষ!"}
+    return {"success": False, "msg": "API থেকে নম্বর পাওয়া যায়নি বা স্টক খালি আছে!"}
 
 def check_live_otp(order_id):
-    """এপিআই থেকে লাইভ ওটিপি কোড চেক করে"""
+    """এপিআই থেকে লাইভ ওটিপি কোড চেক করবে"""
     data = api_request(f"order/{order_id}") or api_request(f"status/{order_id}")
     if data and isinstance(data, dict):
         return data.get("otp") or data.get("sms") or data.get("code")
     return None
 
-# ================= UI KEYBOARDS =================
+# ================= KEYBOARDS =================
 def main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add(
@@ -192,7 +166,7 @@ def start_cmd(message):
                 referred_by = ref_id
                 c.execute("UPDATE users SET balance = balance + ?, referrals_count = referrals_count + 1 WHERE user_id = ?", (REFER_BONUS, ref_id))
                 try:
-                    bot.send_message(ref_id, f"🎉 আপনার রেফারেলে একজন নতুন সদস্য জয়েন করেছে! আপনি পেয়েছেন {REFER_BONUS} ৳")
+                    bot.send_message(ref_id, f"🎉 আপনার রেফারেলে নতুন মেম্বার যুক্ত হয়েছে! বোনাস পেয়েছেন {REFER_BONUS} ৳")
                 except:
                     pass
         c.execute("INSERT INTO users (user_id, username, referred_by) VALUES (?, ?, ?)", (user_id, username, referred_by))
@@ -211,14 +185,14 @@ def start_cmd(message):
     )
     bot.send_message(message.chat.id, welcome_text, reply_markup=main_menu())
 
-# ================= REAL API NUMBER PURCHASE FLOW =================
+# ================= GET NUMBER FLOW =================
 @bot.message_handler(func=lambda msg: msg.text == "📱 GET NUMBER")
 def get_number_flow(message):
     bot.send_chat_action(message.chat.id, 'typing')
     services = get_live_services()
     
     if not services:
-        bot.send_message(message.chat.id, "❌ **এপিআইতে এই মুহূর্তে কোনো সার্ভিস সক্রিয় পাওয়া যায়নি!**\nদয়া করে অ্যাডমিনের সাথে যোগাযোগ করুন।")
+        bot.send_message(message.chat.id, "❌ **দুঃখিত, এপিআই থেকে এই মুহূর্তে কোনো সার্ভিস পাওয়া যায়নি!** স্টক খালি থাকতে পারে।")
         return
 
     markup = types.InlineKeyboardMarkup(row_width=2)
@@ -237,7 +211,6 @@ def on_service_chosen(call):
     countries = get_live_countries(code)
     
     if not countries:
-        # যদি দেশ আলাদা না থাকে তবে সরাসরি গ্লোবাল রিকোয়েস্ট যাবে
         countries = [{"code": "any", "name": "🌍 Any Country"}]
 
     markup = types.InlineKeyboardMarkup(row_width=2)
@@ -251,7 +224,7 @@ def on_order_number(call):
     _, service, country = call.data.split("_")
     user_id = call.from_user.id
     
-    bot.edit_message_text("⏳ **API সার্ভার থেকে সরাসরি নম্বর সংগ্রহ করা হচ্ছে... অপেক্ষা করুন...**", chat_id=call.message.chat.id, message_id=call.message.message_id)
+    bot.edit_message_text("⏳ **API সার্ভার থেকে সরাসরি নম্বর জেনারেট করা হচ্ছে...**", chat_id=call.message.chat.id, message_id=call.message.message_id)
     
     res = purchase_live_number(service, country)
     if res.get("success"):
@@ -284,7 +257,7 @@ def on_order_number(call):
         )
     else:
         err_msg = res.get("msg", "API Error")
-        bot.edit_message_text(f"❌ **নম্বর সংগ্রহ ব্যর্থ হয়েছে!**\n\nকারন: `{err_msg}`", chat_id=call.message.chat.id, message_id=call.message.message_id)
+        bot.edit_message_text(f"❌ **নম্বর সংগ্রহ ব্যর্থ হয়েছে!**\n\nকারণ: `{err_msg}`", chat_id=call.message.chat.id, message_id=call.message.message_id)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("chkotp_"))
 def on_check_otp_click(call):
@@ -301,7 +274,6 @@ def on_check_otp_click(call):
         
     order_id, number, local_otp, user_id = row
     
-    # API Live Check
     live_otp = check_live_otp(order_id)
     if live_otp:
         c.execute("UPDATE orders SET otp = ?, status = 'COMPLETED' WHERE id = ?", (live_otp, db_id))
@@ -321,7 +293,7 @@ def on_check_otp_click(call):
         bot.edit_message_text(f"🎉 **OTP Received!**\n\n📞 Number: `{number}`\n🔑 OTP: `{local_otp}`", chat_id=call.message.chat.id, message_id=call.message.message_id)
     else:
         conn.close()
-        bot.answer_callback_query(call.id, "⏳ OTP এখনো আসেনি। অনুগ্রহ করে ২০-৩০ সেকেন্ড পর আবার ক্লিক করুন...", show_alert=True)
+        bot.answer_callback_query(call.id, "⏳ OTP এখনো আসেনি। অনুগ্রহ করে কিছুক্ষণ পর আবার ক্লিক করুন...", show_alert=True)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("cnlord_"))
 def on_cancel_order_click(call):
@@ -400,7 +372,7 @@ def traffic_ui(message):
         "📊 **BOT TRAFFIC & LIVE STATS**\n\n"
         f"👥 **Total Active Users:** `{total_users + 20449}`\n"
         f"📩 **Total Completed OTPs:** `{total_otps}`\n"
-        f"⚡ **API Status:** `Connected & Live`\n"
+        f"⚡ **API Status:** `Secured & Connected`\n"
         f"🚀 **Success Rate:** `99.9%`"
     )
     bot.send_message(message.chat.id, text)
@@ -496,14 +468,11 @@ def support_ui(message):
     markup.add(types.InlineKeyboardButton(text="❌ Close", callback_data="close_box"))
     bot.send_message(message.chat.id, text, reply_markup=markup)
 
-# ================= 👑 FULL POWERFUL ADMIN PANEL =================
+# ================= 👑 POWERFUL PROFESSIONAL ADMIN PANEL =================
 @bot.message_handler(commands=['admin'])
 def admin_panel_cmd(message):
     if message.from_user.id != ADMIN_ID:
         return
-    
-    api_key = get_config("api_key")
-    api_url = get_config("api_url")
     
     conn = sqlite3.connect("database.db")
     c = conn.cursor()
@@ -517,39 +486,14 @@ def admin_panel_cmd(message):
         "👑 **PROFESSIONAL ADMIN DASHBOARD**\n\n"
         f"👤 **Total Users:** `{u_cnt}`\n"
         f"⏳ **Pending Withdrawals:** `{w_cnt}`\n"
-        f"🔗 **API Endpoint:** `{api_url}`\n"
-        f"🔑 **API Key:** `{api_key[:12]}...`\n\n"
-        "⚙️ **Commands:**\n"
-        "🔸 `/setapikey <new_key>` - নতুন API Key সেট করতে\n"
-        "🔸 `/setapiurl <new_url>` - নতুন API URL সেট করতে\n"
-        "🔸 `/addbalance <user_id> <amount>` - ব্যবহারকারীকে ব্যালেন্স দিতে\n"
-        "🔸 `/broadcast <message>` - সকল ব্যবহারকারীকে নোটিশ পাঠাতে"
+        f"🔒 **API Status:** `Secured & Locked`\n\n"
+        "⚙️ **Admin Commands:**\n"
+        "🔸 `/addbalance <user_id> <amount>` - ইউজারের ব্যালেন্স বাড়াতে\n"
+        "🔸 `/deductbalance <user_id> <amount>` - ইউজারের ব্যালেন্স কাটতে\n"
+        "🔸 `/userinfo <user_id>` - ইউজারের তথ্য দেখতে\n"
+        "🔸 `/broadcast <message>` - সবাইকে নোটিশ পাঠাতে"
     )
     bot.send_message(ADMIN_ID, text)
-
-@bot.message_handler(commands=['setapikey'])
-def set_apikey_cmd(message):
-    if message.from_user.id != ADMIN_ID:
-        return
-    parts = message.text.split(maxsplit=1)
-    if len(parts) > 1:
-        new_key = parts[1].strip()
-        set_config("api_key", new_key)
-        bot.send_message(ADMIN_ID, f"✅ **API Key সফলভাবে আপডেট করা হয়েছে:**\n`{new_key}`")
-    else:
-        bot.send_message(ADMIN_ID, "❌ ফরম্যাট: `/setapikey YOUR_API_KEY`")
-
-@bot.message_handler(commands=['setapiurl'])
-def set_apiurl_cmd(message):
-    if message.from_user.id != ADMIN_ID:
-        return
-    parts = message.text.split(maxsplit=1)
-    if len(parts) > 1:
-        new_url = parts[1].strip()
-        set_config("api_url", new_url)
-        bot.send_message(ADMIN_ID, f"✅ **API URL সফলভাবে আপডেট করা হয়েছে:**\n`{new_url}`")
-    else:
-        bot.send_message(ADMIN_ID, "❌ ফরম্যাট: `/setapiurl https://api.yourprovider.com/v1`")
 
 @bot.message_handler(commands=['addbalance'])
 def add_balance_cmd(message):
@@ -566,6 +510,39 @@ def add_balance_cmd(message):
         bot.send_message(int(uid), f"🎁 এডমিন আপনার একাউন্টে {amt} ৳ ব্যালেন্স যোগ করেছেন!")
     except Exception as e:
         bot.send_message(ADMIN_ID, f"❌ এরর: {e}")
+
+@bot.message_handler(commands=['deductbalance'])
+def deduct_balance_cmd(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    try:
+        _, uid, amt = message.text.split()
+        conn = sqlite3.connect("database.db")
+        c = conn.cursor()
+        c.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (float(amt), int(uid)))
+        conn.commit()
+        conn.close()
+        bot.send_message(ADMIN_ID, f"✅ User `{uid}`-এর একাউন্ট থেকে {amt} ৳ কাটা হয়েছে!")
+    except Exception as e:
+        bot.send_message(ADMIN_ID, f"❌ এরর: {e}")
+
+@bot.message_handler(commands=['userinfo'])
+def userinfo_cmd(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    try:
+        _, uid = message.text.split()
+        conn = sqlite3.connect("database.db")
+        c = conn.cursor()
+        c.execute("SELECT username, balance, referrals_count, total_otp FROM users WHERE user_id = ?", (int(uid),))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            bot.send_message(ADMIN_ID, f"👤 **User Info ({uid}):**\n\nUsername: @{row[0]}\nBalance: {row[1]} ৳\nRefers: {row[2]}\nTotal OTP: {row[3]}")
+        else:
+            bot.send_message(ADMIN_ID, "❌ ইউজার খুঁজে পাওয়া যায়নি!")
+    except Exception as e:
+        bot.send_message(ADMIN_ID, f"❌ ফরম্যাট ভুল: `/userinfo <user_id>`")
 
 @bot.message_handler(commands=['broadcast'])
 def broadcast_cmd(message):
@@ -588,12 +565,11 @@ def broadcast_cmd(message):
         try:
             bot.send_message(u[0], f"📢 **NOTICE FROM ADMIN:**\n\n{msg_to_send}")
             count += 1
-            time.sleep(0.05)
+            time.sleep(0.04)
         except:
             pass
-    bot.send_message(ADMIN_ID, f"✅ সফলভাবে `{count}` জন ইউজারের কাছে নোটিশ পাঠানো হয়েছে!")
+    bot.send_message(ADMIN_ID, f"✅ সফলভাবে `{count}` জন ইউজারের কাছে ব্রডকাস্ট সম্পন্ন হয়েছে!")
 
-# Admin 1-Click Approve/Reject Callbacks
 @bot.callback_query_handler(func=lambda call: call.data.startswith("wapp_") or call.data.startswith("wrej_"))
 def on_admin_withdraw_action(call):
     if call.from_user.id != ADMIN_ID:
@@ -610,7 +586,7 @@ def on_admin_withdraw_action(call):
             c.execute("UPDATE withdrawals SET status = 'Approved' WHERE id = ?", (int(w_id),))
             bot.edit_message_text(f"✅ **Approved by Admin!** ({amt} ৳)", chat_id=call.message.chat.id, message_id=call.message.message_id)
             try:
-                bot.send_message(uid, f"🎉 আপনার {amt} ৳ উইথড্রয়াল সফলভাবে সম্পন্ন হয়েছে!")
+                bot.send_message(uid, f"🎉 আপনার {amt} ৳ উইথড্রয়াল সফলভাবে এপ্রুভ করা হয়েছে!")
             except:
                 pass
         else:
@@ -618,7 +594,7 @@ def on_admin_withdraw_action(call):
             c.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (amt, uid))
             bot.edit_message_text(f"❌ **Rejected & Refunded!** ({amt} ৳)", chat_id=call.message.chat.id, message_id=call.message.message_id)
             try:
-                bot.send_message(uid, f"❌ আপনার {amt} ৳ উইথড্র রিকোয়েস্ট বাতিল করা হয়েছে এবং ব্যালেন্স ফেরত দেওয়া হয়েছে।")
+                bot.send_message(uid, f"❌ আপনার {amt} ৳ উইথড্র রিকোয়েস্ট বাতিল করা হয়েছে এবং একাউন্টে ব্যালেন্স ফেরত দেওয়া হয়েছে।")
             except:
                 pass
     conn.commit()
@@ -650,7 +626,7 @@ def text_dispatcher(message):
         conn.close()
         
         if rows:
-            res = "🔍 **Search Results (From History):**\n\n"
+            res = "🔍 **Search Results (History):**\n\n"
             for r in rows:
                 res += f"🔹 `{r[2]}` | {r[0].upper()} ({r[1].upper()})\n"
             bot.send_message(message.chat.id, res, reply_markup=main_menu())
@@ -685,22 +661,21 @@ def text_dispatcher(message):
         conn.commit()
         conn.close()
 
-        # Admin Approval Buttons
         admin_markup = types.InlineKeyboardMarkup(row_width=2)
         admin_markup.add(
             types.InlineKeyboardButton(text="✅ Approve", callback_data=f"wapp_{w_id}"),
             types.InlineKeyboardButton(text="❌ Reject", callback_data=f"wrej_{w_id}")
         )
         bot.send_message(ADMIN_ID, f"🚨 **New Withdrawal Request!**\n\n👤 User: `{user_id}`\n💳 Method: {method}\n📱 Acc: `{account}`\n💰 Amount: `{amount}` ৳", reply_markup=admin_markup)
-        bot.send_message(message.chat.id, "✅ **উইথড্র রিকোয়েস্ট সফল হয়েছে!** দ্রুত এডমিন পেমেন্ট চেক করবেন।", reply_markup=main_menu())
+        bot.send_message(message.chat.id, "✅ **উইথড্র রিকোয়েস্ট সফল হয়েছে!** এডমিন শীঘ্রই পেমেন্ট সম্পন্ন করবেন।", reply_markup=main_menu())
         user_states.pop(user_id, None)
 
-# ================= RENDER DUMMY WEB SERVER =================
+# ================= RENDER KEEP-ALIVE SERVER =================
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Live OTP Bot is Running 24/7!")
+        self.wfile.write(b"Locked API OTP Bot is Running 24/7!")
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
@@ -708,7 +683,7 @@ def run_web():
     server.serve_forever()
 
 if __name__ == "__main__":
-    print("🚀 Starting Web Server for Render...")
+    print("🚀 Starting Keep-Alive Web Server for Render...")
     threading.Thread(target=run_web, daemon=True).start()
-    print("🤖 Telegram Bot Started with Real API...")
+    print("🤖 Secure OTP Bot Started Successfully...")
     bot.infinity_polling()
